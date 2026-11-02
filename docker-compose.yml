@@ -1,0 +1,44 @@
+# Local stack: the API container linked to a PostgreSQL 16 container.
+#   docker compose up --build
+# Values come from .env (see .env.example); every one has a working default.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-halcyon}
+      POSTGRES_USER: ${POSTGRES_USER:-halcyon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-halcyon-local-only}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+    image: ${API_IMAGE:-halcyon/ticketing-api:local}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-halcyon}:${POSTGRES_PASSWORD:-halcyon-local-only}@db:5432/${POSTGRES_DB:-halcyon}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-local-compose-secret-key-change-me-for-anything-real-0123456789}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
+      DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL:-admin@halcyon.example}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-HalcyonAdmin!2026}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+volumes:
+  pgdata:
